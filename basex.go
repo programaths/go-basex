@@ -2,9 +2,10 @@ package basex
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
-	"fmt"
+	"errors"
 	"net"
 	"strings"
 )
@@ -52,7 +53,7 @@ func New(adr string, user string, pass string) (cli *BaseXClient, err error) {
 	}
 
 	if ok {
-		err = fmt.Errorf("Login error")
+		err = errors.New("Login error")
 		cli = nil
 	}
 
@@ -91,7 +92,8 @@ func (b *BaseXClient) WriteByte(bte byte) {
 	b.Flush()
 }
 
-func (b *BaseXClient) ReadString() (s string) {
+func (b *BaseXClient) ReadString() string {
+	buf := bytes.NewBuffer(nil)
 	for {
 		d, err := b.ReadWriter.ReadByte()
 
@@ -103,9 +105,9 @@ func (b *BaseXClient) ReadString() (s string) {
 			d, err = b.ReadWriter.ReadByte()
 		}
 
-		s = s + string(d)
+		buf.WriteByte(d)
 	}
-	return
+	return buf.String()
 }
 
 func (this *BaseXClient) login(user, password, realm, nonce string) bool {
