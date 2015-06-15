@@ -1,12 +1,10 @@
 package basex
 
-import (
-	"fmt"
-)
+import "errors"
 
 const (
-	Q_NONE = 0
-	Q_MORE = iota
+	Q_NONE = iota
+	Q_MORE
 )
 
 type Query struct {
@@ -19,12 +17,12 @@ type Query struct {
 
 func (q *Query) More() (result bool) {
 	if q.state == Q_NONE {
-		q.cli.exec(byte(4), q.id)
+		q.cli.exec(4, q.id)
 		q.state = Q_MORE
 	}
 
 	b, _ := q.cli.ReadByte()
-	if b == byte(0) {
+	if b == 0 {
 		if !q.cli.ok() {
 			tst := q.cli.ReadString()
 			panic(tst)
@@ -46,13 +44,13 @@ func (q *Query) Next() (s string, err error) {
 		err = nil
 	} else {
 		s = ""
-		err = fmt.Errorf("Logic error")
+		err = errors.New("Logic error")
 	}
 	return s, err
 }
 
 func (q *Query) Bind(name string, value string, valType string) (err error) {
-	q.cli.WriteByte(byte(3))
+	q.cli.WriteByte(3)
 	q.cli.send(q.id)
 	q.cli.send(name)
 	q.cli.send(value)
@@ -60,20 +58,20 @@ func (q *Query) Bind(name string, value string, valType string) (err error) {
 	q.cli.ReadString()
 	if !q.cli.ok() {
 		errTxt := q.cli.ReadString()
-		err = fmt.Errorf(errTxt)
+		err = errors.New(errTxt)
 	}
 	return err
 }
 
 func (q *Query) ExecToChan(c chan<- string) {
 	if q.state == Q_NONE {
-		q.cli.exec(byte(4), q.id)
+		q.cli.exec(4, q.id)
 		q.state = Q_MORE
 	}
 
 	for {
 		b, _ := q.cli.ReadByte()
-		if b == byte(0) {
+		if b == 0 {
 			if !q.cli.ok() {
 				tst := q.cli.ReadString()
 				panic(tst)
@@ -89,12 +87,12 @@ func (q *Query) ExecToChan(c chan<- string) {
 }
 
 func (q *Query) Execute() (r string, err error) {
-	q.cli.WriteByte(byte(5))
+	q.cli.WriteByte(5)
 	q.cli.send(q.id)
 	r = q.cli.ReadString()
 	if !q.cli.ok() {
 		errTxt := q.cli.ReadString()
-		err = fmt.Errorf(errTxt)
+		err = errors.New(errTxt)
 	}
 	return
 }

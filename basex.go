@@ -2,14 +2,19 @@ package basex
 
 import (
 	"bufio"
-	m5 "crypto/md5"
-	"fmt"
+	"bytes"
+	"crypto/md5"
+	"encoding/hex"
+	"errors"
 	"net"
+	"strings"
+	"sync"
 )
 
 type BaseXClient struct {
 	*bufio.ReadWriter
-	con net.Conn
+	con     net.Conn
+	bufPool *sync.Pool
 }
 
 func (b *BaseXClient) exec(cmd byte, arg string) {
@@ -20,31 +25,48 @@ func (b *BaseXClient) exec(cmd byte, arg string) {
 func (b *BaseXClient) send(str string) {
 	strLen := len(str)
 	for i := 0; i < strLen; i++ {
-		if str[i] == byte(00) || str[i] == byte(255) {
-			b.ReadWriter.WriteString("\xFF")
+		if str[i] == 0 || str[i] == 255 {
+			b.ReadWriter.WriteByte(0xFF)
 		}
 		b.ReadWriter.WriteByte(str[i])
 	}
-	b.WriteByte(byte(0))
+	b.WriteByte(0)
 	b.ReadWriter.Flush()
 }
 
 func (b *BaseXClient) ok() bool {
 	d, _ := b.ReadWriter.ReadByte()
-	return d == byte(0)
+	return d == 0
 }
 
-func New(adr string, user string, pass string) (cli *BaseXClient, err error) {
-	cli = &BaseXClient{}
+func New(addr string, user string, pass string) (cli *BaseXClient, err error) {
+	cli = &BaseXClient{
+		bufPool: &sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(nil)
+			},
+		},
+	}
 
-	cli.con, _ = net.Dial("tcp", adr)
+	cli.con, err = net.Dial("tcp", addr)
+	if err != nil {
+		cli = nil
+		return
+	}
+
 	cli.ReadWriter = bufio.NewReadWriter(bufio.NewReader(cli.con), bufio.NewWriter(cli.con))
 	ts := cli.ReadString()
-	cli.send(user)
-	cli.send(md5(md5(pass) + ts))
 
-	if !cli.ok() {
-		err = fmt.Errorf("Login error")
+	var ok bool
+	cli.send(user)
+	if i := strings.Index(ts, ":"); i != -1 {
+		ok = cli.login(user, pass, string(ts[:i]), string(ts[i+1:]))
+	} else {
+		ok = cli.loginLegacy(pass, ts)
+	}
+
+	if !ok {
+		err = errors.New("Login error")
 		cli = nil
 	}
 
@@ -64,12 +86,18 @@ func (b *BaseXClient) Command(cmd string) (string, string) {
 }
 
 func (b *BaseXClient) Query(qry string) *Query {
-	b.exec(byte(0), qry)
+	b.exec(0, qry)
 	id := b.ReadString()
 	if !b.ok() {
 		panic(b.ReadString())
 	}
-	return &Query{id: id, cli: b, hasNext: false, lastResult: "", state: 0}
+	return &Query{
+		id:         id,
+		cli:        b,
+		hasNext:    false,
+		lastResult: "",
+		state:      0,
+	}
 }
 
 func (b *BaseXClient) WriteString(str string) {
@@ -83,25 +111,43 @@ func (b *BaseXClient) WriteByte(bte byte) {
 	b.Flush()
 }
 
-func (b *BaseXClient) ReadString() (s string) {
+func (b *BaseXClient) ReadString() string {
+	// bytes.Buffer is a large structure, try to recycle one
+	buf := b.bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+
 	for {
 		d, err := b.ReadWriter.ReadByte()
 
-		if err != nil || d == byte(0) {
+		if err != nil || d == 0 {
 			break
 		}
 
-		if d == byte(255) {
+		if d == 255 {
 			d, err = b.ReadWriter.ReadByte()
 		}
 
-		s = s + string(d)
+		buf.WriteByte(d)
 	}
-	return
+	str := buf.String()
+
+	// Put the buffer back into the pool
+	b.bufPool.Put(buf)
+	return str
 }
 
-func md5(str string) string {
-	md5io := m5.New()
-	md5io.Write([]byte(str))
-	return fmt.Sprintf("%x", string(md5io.Sum(nil)))
+func (this *BaseXClient) login(user, password, realm, nonce string) bool {
+	this.send(md5Hex(md5Hex(user+":"+realm+":"+password) + nonce))
+	return this.ok()
+}
+
+func (this *BaseXClient) loginLegacy(password, nonce string) bool {
+	this.send(md5Hex(md5Hex(password) + nonce))
+	return this.ok()
+}
+
+func md5Hex(str string) string {
+	hash := md5.New()
+	hash.Write([]byte(str))
+	return hex.EncodeToString(hash.Sum(nil))
 }
