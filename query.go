@@ -1,12 +1,10 @@
 package basex
 
-import (
-	"fmt"
-)
+import "errors"
 
 const (
-	Q_NONE = 0
-	Q_MORE = iota
+	Q_NONE = iota
+	Q_MORE
 )
 
 type Query struct {
@@ -46,7 +44,7 @@ func (q *Query) Next() (s string, err error) {
 		err = nil
 	} else {
 		s = ""
-		err = fmt.Errorf("Logic error")
+		err = errors.New("Logic error")
 	}
 	return s, err
 }
@@ -60,7 +58,7 @@ func (q *Query) Bind(name string, value string, valType string) (err error) {
 	q.cli.ReadString()
 	if !q.cli.ok() {
 		errTxt := q.cli.ReadString()
-		err = fmt.Errorf(errTxt)
+		err = errors.New(errTxt)
 	}
 	return err
 }
@@ -94,7 +92,7 @@ func (q *Query) Execute() (r string, err error) {
 	r = q.cli.ReadString()
 	if !q.cli.ok() {
 		errTxt := q.cli.ReadString()
-		err = fmt.Errorf(errTxt)
+		err = errors.New(errTxt)
 	}
 	return
 }
