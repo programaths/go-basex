@@ -65,7 +65,7 @@ func New(addr string, user string, pass string) (cli *BaseXClient, err error) {
 		ok = cli.loginLegacy(pass, ts)
 	}
 
-	if ok {
+	if !ok {
 		err = errors.New("Login error")
 		cli = nil
 	}
