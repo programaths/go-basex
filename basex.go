@@ -37,10 +37,15 @@ func (b *BaseXClient) ok() bool {
 	return d == 0
 }
 
-func New(adr string, user string, pass string) (cli *BaseXClient, err error) {
+func New(addr string, user string, pass string) (cli *BaseXClient, err error) {
 	cli = &BaseXClient{}
 
-	cli.con, _ = net.Dial("tcp", adr)
+	cli.con, err = net.Dial("tcp", addr)
+	if err != nil {
+		cli = nil
+		return
+	}
+
 	cli.ReadWriter = bufio.NewReadWriter(cli.con, cli.con)
 	ts := cli.ReadString()
 
@@ -78,7 +83,13 @@ func (b *BaseXClient) Query(qry string) *Query {
 	if !b.ok() {
 		panic(b.ReadString())
 	}
-	return &Query{id: id, cli: b, hasNext: false, lastResult: "", state: 0}
+	return &Query{
+		id:         id,
+		cli:        b,
+		hasNext:    false,
+		lastResult: "",
+		state:      0,
+	}
 }
 
 func (b *BaseXClient) WriteString(str string) {
