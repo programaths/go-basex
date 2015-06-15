@@ -2,9 +2,11 @@ package basex
 
 import (
 	"bufio"
-	m5 "crypto/md5"
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
 	"net"
+	"strings"
 )
 
 type BaseXClient struct {
@@ -40,10 +42,16 @@ func New(adr string, user string, pass string) (cli *BaseXClient, err error) {
 	cli.con, _ = net.Dial("tcp", adr)
 	cli.ReadWriter = bufio.NewReadWriter(bufio.NewReader(cli.con), bufio.NewWriter(cli.con))
 	ts := cli.ReadString()
-	cli.send(user)
-	cli.send(md5(md5(pass) + ts))
 
-	if !cli.ok() {
+	var ok bool
+	cli.send(user)
+	if i := strings.Index(ts, ":"); i != -1 {
+		ok = cli.login(user, pass, string(ts[:i]), string(ts[i+1:]))
+	} else {
+		ok = cli.loginLegacy(pass, ts)
+	}
+
+	if ok {
 		err = fmt.Errorf("Login error")
 		cli = nil
 	}
@@ -100,8 +108,18 @@ func (b *BaseXClient) ReadString() (s string) {
 	return
 }
 
-func md5(str string) string {
-	md5io := m5.New()
-	md5io.Write([]byte(str))
-	return fmt.Sprintf("%x", string(md5io.Sum(nil)))
+func (this *BaseXClient) login(user, password, realm, nonce string) bool {
+	this.send(md5Hex(md5Hex(user+":"+realm+":"+password) + nonce))
+	return this.ok()
+}
+
+func (this *BaseXClient) loginLegacy(password, nonce string) bool {
+	this.send(md5Hex(md5Hex(password) + nonce))
+	return this.ok()
+}
+
+func md5Hex(str string) string {
+	hash := md5.New()
+	hash.Write([]byte(str))
+	return hex.EncodeToString(hash.Sum(nil))
 }
