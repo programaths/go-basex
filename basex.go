@@ -46,7 +46,7 @@ func New(addr string, user string, pass string) (cli *BaseXClient, err error) {
 		return
 	}
 
-	cli.ReadWriter = bufio.NewReadWriter(cli.con, cli.con)
+	cli.ReadWriter = bufio.NewReadWriter(bufio.NewReader(cli.con), bufio.NewWriter(cli.con))
 	ts := cli.ReadString()
 
 	var ok bool
