@@ -23,25 +23,25 @@ func (b *BaseXClient) exec(cmd byte, arg string) {
 func (b *BaseXClient) send(str string) {
 	strLen := len(str)
 	for i := 0; i < strLen; i++ {
-		if str[i] == byte(00) || str[i] == byte(255) {
-			b.ReadWriter.WriteString("\xFF")
+		if str[i] == 0 || str[i] == 255 {
+			b.ReadWriter.WriteByte(0xFF)
 		}
 		b.ReadWriter.WriteByte(str[i])
 	}
-	b.WriteByte(byte(0))
+	b.WriteByte(0)
 	b.ReadWriter.Flush()
 }
 
 func (b *BaseXClient) ok() bool {
 	d, _ := b.ReadWriter.ReadByte()
-	return d == byte(0)
+	return d == 0
 }
 
 func New(adr string, user string, pass string) (cli *BaseXClient, err error) {
 	cli = &BaseXClient{}
 
 	cli.con, _ = net.Dial("tcp", adr)
-	cli.ReadWriter = bufio.NewReadWriter(bufio.NewReader(cli.con), bufio.NewWriter(cli.con))
+	cli.ReadWriter = bufio.NewReadWriter(cli.con, cli.con)
 	ts := cli.ReadString()
 
 	var ok bool
@@ -73,7 +73,7 @@ func (b *BaseXClient) Command(cmd string) (string, string) {
 }
 
 func (b *BaseXClient) Query(qry string) *Query {
-	b.exec(byte(0), qry)
+	b.exec(0, qry)
 	id := b.ReadString()
 	if !b.ok() {
 		panic(b.ReadString())
@@ -97,11 +97,11 @@ func (b *BaseXClient) ReadString() string {
 	for {
 		d, err := b.ReadWriter.ReadByte()
 
-		if err != nil || d == byte(0) {
+		if err != nil || d == 0 {
 			break
 		}
 
-		if d == byte(255) {
+		if d == 255 {
 			d, err = b.ReadWriter.ReadByte()
 		}
 
