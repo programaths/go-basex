@@ -8,11 +8,13 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 )
 
 type BaseXClient struct {
 	*bufio.ReadWriter
-	con net.Conn
+	con     net.Conn
+	bufPool *sync.Pool
 }
 
 func (b *BaseXClient) exec(cmd byte, arg string) {
@@ -38,7 +40,13 @@ func (b *BaseXClient) ok() bool {
 }
 
 func New(addr string, user string, pass string) (cli *BaseXClient, err error) {
-	cli = &BaseXClient{}
+	cli = &BaseXClient{
+		bufPool: &sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(nil)
+			},
+		},
+	}
 
 	cli.con, err = net.Dial("tcp", addr)
 	if err != nil {
@@ -104,7 +112,10 @@ func (b *BaseXClient) WriteByte(bte byte) {
 }
 
 func (b *BaseXClient) ReadString() string {
-	buf := bytes.NewBuffer(nil)
+	// bytes.Buffer is a large structure, try to recycle one
+	buf := b.bufPool.Get().(*bytes.Buffer)
+	buf.Reset()
+
 	for {
 		d, err := b.ReadWriter.ReadByte()
 
@@ -118,7 +129,11 @@ func (b *BaseXClient) ReadString() string {
 
 		buf.WriteByte(d)
 	}
-	return buf.String()
+	str := buf.String()
+
+	// Put the buffer back into the pool
+	b.bufPool.Put(buf)
+	return str
 }
 
 func (this *BaseXClient) login(user, password, realm, nonce string) bool {
