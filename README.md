@@ -10,7 +10,7 @@ package main
 
 import (
 	//"fmt"
-	"github.com/programaths/go-basex/basex"
+	"github.com/programaths/go-basex"
 )
 
 func main() {
